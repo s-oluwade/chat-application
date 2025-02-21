@@ -1,16 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FiMessageSquare, FiX } from 'react-icons/fi';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:4000');
 
 const ChatBox: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{ text: string; sender: string }[]>([]);
+  const [receivedMessages, setReceivedMessages] = useState<{ text: string; sender: string }[]>([]);
 
   const toggleChat = () => setIsOpen((prev) => !prev);
 
-  const handleSend = (message: string) => {
-    setMessages((prev) => [...prev, { text: message, sender: 'User' }]);
+  useEffect(() => {
+    socket.on('receiveMessage', (msg) => {
+      console.log('received message from server `receiveMessage`: ', msg);
+      setMessages((prev) => [...prev, msg]); // Update chat messages
+    });
+
+    socket.on('broadcastMessage', (msg) => {
+      console.log('Broadcast message received: ', msg);
+    });
+
+    return () => {
+      socket.off('message'); // Cleanup on unmount
+    };
+  }, []);
+
+  const sendMessage = (msg: string) => {
+    socket.emit('message', msg);
   };
 
   return (
@@ -45,7 +64,7 @@ const ChatBox: React.FC = () => {
           <MessageList messages={messages} />
 
           {/* Input Field */}
-          <MessageInput onSend={handleSend} />
+          <MessageInput onSend={sendMessage} />
         </div>
       )}
     </div>
