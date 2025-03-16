@@ -2,7 +2,6 @@ const express = require('express');
 const { Server } = require('socket.io');
 const http = require('http');
 const cors = require('cors');
-const { faker } = require('@faker-js/faker');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,35 +12,43 @@ const io = new Server(server, {
   },
 });
 
-// const admin = require('firebase-admin');
-// const serviceAccount = require('./path-to-service-account-key.json'); // Download from Firebase console
-
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount),
-// });
-
 app.use(cors());
 app.use(express.json());
 
 // Store connected users
-let connectedUsers = {};
+let connectedUsers = new Map();
 
 io.on('connection', (socket) => {
-  const randomUsername = faker.internet.username();
 
   if (!(socket.id in connectedUsers)) {
-    connectedUsers[socket.id] = randomUsername;
-    console.log(`User ${randomUsername} connected with ID ${socket.id}`);
-    io.emit('broadcastMessage', `${randomUsername} joined the chat`);
-    socket.emit('You are connected as: ', randomUsername);
+    console.log(`A new user connected with ID ${socket.id}`);
   }
-  console.log('Connected Users: \n' + connectedUsers);
 
-  // Handle new message
-  socket.on('message', (data) => {
-    console.log('message from message received: ', data);
-    socket.emit('receiveMessage', 'Message from message received: ' + data); // Broadcast message to all clients
-    io.emit('broadcastMessage', `${randomUsername} said ${data}`);
+  // Handle username assignment
+  socket.on("username", (username) => {
+    // if username exists in values, replace the key with new socket.id
+    for (let [key, value] of connectedUsers.entries()) {
+      if (value === username) {
+          connectedUsers.delete(key); // Remove the old key
+      }
+    }
+
+    connectedUsers.set(socket.id, username); // Add new key with the same value
+    console.log(`User ${username} connected with ID ${socket.id}. Total users: ${connectedUsers.size}`);
+
+    // Emit updated online user list
+    io.emit("onlineUsers", Array.from(connectedUsers.values()));
+  });
+
+  // Handle messages
+  socket.on('message', (message, callback) => {
+    const sender = connectedUsers.get(socket.id) || "Unknown User";
+    console.log(`${sender} sent a message: ${message}`);
+
+    // Broadcast message to all clients
+    io.emit("broadcastMessage", { sender, content: message });
+
+    if (callback) callback();
   });
 
   // Handle user disconnect
